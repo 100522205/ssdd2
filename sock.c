@@ -31,11 +31,11 @@ int sock_send(int fd_socket, char * buff, int size){
 int sock_receive(int fd_socket, char*buff, int size){
     /* Función para la recepción de un string por socket*/
 
-    int remaining = size, read, to_return=0;
-    while((remaining>0)&&((read = read(fd_socket, buff, remaining))>0)){
-        remaining-=read;
-        to_return+=read;
-        buff+=read;
+    int remaining = size, read_v, to_return=0;
+    while((remaining>0)&&((read_v = read(fd_socket, buff, remaining))>0)){
+        remaining-=read_v;
+        to_return+=read_v;
+        buff+=read_v;
     }
     return to_return;
 }

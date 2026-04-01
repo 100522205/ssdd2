@@ -13,7 +13,7 @@
 #include <stdio.h>
 #include "claves.h"
 
-#define MAX_LENG 256
+#define MAX_LENG 2048 // lo subimos por seguridad
 
 /*
 Programa para envío y recepción usando sockets
@@ -91,13 +91,14 @@ struct Respuesta {
 
 
 int sock_send(int fd_socket, char * buff, int size);
-int sock_recieve(int fd_socket, char*buff, int size);
+int sock_receive(int fd_socket, char*buff, int size);
 int int_to_string(int integer, char*buff);
 int float_to_string(float f, char*buff);
-int paq_to_string(struct Paquete *p, char*buff);
-int pet_to_string(struct Peticion, char*buff);
-int res_to_string(struct Respuesta, char*buff);
-
+int paquete_to_string(struct Paquete * p, char*buff);
+int pet_to_string(struct Peticion * pet, char*buff);
+int res_to_string(struct Respuesta* res, char*buff);
+int string_to_pet(char * buff, struct Peticion * pet);
+int string_to_res(char* buff, struct Respuesta * res);
 
 
 #endif
