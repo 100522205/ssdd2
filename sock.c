@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/socket.h>
@@ -9,7 +8,8 @@
 #include <stdio.h>
 #include <string.h>
 #include "claves.h"
-#include "malloc.h"
+#include <malloc.h>
+#include <stdlib.h>
 #include "sock.h"
 
 
@@ -107,11 +107,11 @@ int pet_to_string(struct Peticion * pet, char*buff){
     buff+=move_this;
     total+=move_this;
 
-    move_this= sprintf(buff, "%s ", pet->key);
+    move_this= sprintf(buff, "%s ", pet->key[0]== '\0' ? "-" : pet->key);
     buff+=move_this;
     total+=move_this;
 
-    move_this= sprintf(buff, "%s ", pet->value1); 
+    move_this= sprintf(buff, "%s ", pet->value1[0] == '\0' ? "-" : pet->value1); 
     buff+=move_this;
     total+=move_this;
 
@@ -189,7 +189,7 @@ int res_to_string(struct Respuesta* res, char*buff){
     buff+=move_this;
     total+=move_this;
 
-    move_this= sprintf(buff, "%s ", res->value1);
+    move_this= sprintf(buff, "%s ", res->value1[0] == '\0' ? "-" : res->value1);
     buff+=move_this;
     total+=move_this;
 

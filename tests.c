@@ -16,7 +16,7 @@ int test_set(){
 
 int test_get(){
     char value1[50];
-    int n;
+    int n=0;
     float v[10];
     struct Paquete p;
 

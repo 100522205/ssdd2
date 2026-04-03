@@ -50,12 +50,14 @@ int connect_to(int * fd){
     // ahora podemos ya configurar el sockaddr
     socketRemoto.sin_family=AF_INET;
     socketRemoto.sin_port=htons(atoi(port));
-    if(memcpy(&socketRemoto.sin_addr, info_host-> h_addr_list[0], info_host->h_length)<0)return error("Error en memcpy de connect_to");
+    if(memcpy(&socketRemoto.sin_addr, info_host-> h_addr_list[0], info_host->h_length)== NULL)return error("Error en memcpy de connect_to");
 
     // ahora paso de mensajes tcp
     int o = 1;
+    *fd=socket(AF_INET, SOCK_STREAM, 0);
+    if(*fd<0) return error("Error creando socket para el fd de connect_to");
     if(setsockopt(*fd, IPPROTO_TCP, TCP_NODELAY, &o, sizeof(o))<0) return error("Error en setsockopt de connect_to");
-    if(connect(*fd, &socketRemoto, sizeof(socketRemoto))<0) return error("Error en connect de connect_to");
+    if(connect(*fd, (struct sockaddr *)&socketRemoto, sizeof(socketRemoto))<0) return error("Error en connect de connect_to");
 
     conectado=1;
     return 0;
@@ -66,17 +68,18 @@ int destroy(void){
     // Funcion del proxi para llamar a destroy
     // preparación previa
     if(!obtenido) if(getGlobals()<0) return error("Error en destroy: Error en obtencion de var de entorno");
-    if(!conectado) if(connect_to(fdConexion)<0) return error("Error en destroy: Error en conexión");
+    if(!conectado) if(connect_to(&fdConexion)<0) return error("Error en destroy: Error en conexión");
 
     // envío de petición
     struct Peticion pet;
-    char buff[MAX_LENG];
+    bzero(&pet, sizeof(struct Peticion));
+    char buff[MAX_LENG]={0};
     pet.cod_op=0;
     if(pet_to_string(&pet, buff)<0) return error("Error en destroy: Error conversion a string en función destroy");
     if(sock_send(fdConexion, buff, MAX_LENG)<0) return error("Error en destroy: Error al enviar");
     
     // recibir la respuesta
-    char buffRec[MAX_LENG];
+    char buffRec[MAX_LENG]={0};
     if(sock_receive(fdConexion, buffRec, MAX_LENG)<0) return error("Error en destroy: Error al recibir");
     struct Respuesta res;
     if(string_to_res(buffRec, &res)<0) return error("Error en destroy: Error al convertir respuesta a objeto");
@@ -89,12 +92,15 @@ int destroy(void){
 int set_value(char *key, char *value1, int N_value2, float *V_value2, struct Paquete value3){
     // Funcion del proxy para llamar a set_value
     // preparación previa
+    if(N_value2<1||N_value2>32)return -1; // BUG DE OVERFLOW SI NO CONTROLAMOS
     if(!obtenido) if(getGlobals()<0) return error("Error en set_value: Error en obtencion de var de entorno");
-    if(!conectado) if(connect_to(fdConexion)<0) return error("Error en set_value: Error en conexión");
+    if(!conectado) if(connect_to(&fdConexion)<0) return error("Error en set_value: Error en conexión");
 
     // preparación de petición
     struct Peticion pet;
-    char buff[MAX_LENG];
+    bzero(&pet, sizeof(struct Peticion));
+
+    char buff[MAX_LENG]={0};
     pet.cod_op=1;
     strcpy(pet.key, key);
     strcpy(pet.value1, value1);
@@ -109,7 +115,7 @@ int set_value(char *key, char *value1, int N_value2, float *V_value2, struct Paq
     if(sock_send(fdConexion, buff, MAX_LENG)<0) return error("Error en set_value: Error al enviar");
     
     // recibir la respuesta
-    char buffRec[MAX_LENG];
+    char buffRec[MAX_LENG]={0};
     if(sock_receive(fdConexion, buffRec, MAX_LENG)<0) return error("Error en set_value: Error al recibir");
     struct Respuesta res;
     if(string_to_res(buffRec, &res)<0) return error("Error en set_value: Error al convertir respuesta a objeto");
@@ -122,11 +128,12 @@ int get_value(char *key, char *value1, int *N_value2, float *V_value2, struct Pa
     // Funcion del proxy para llamar a get_value
     // preparación previa
     if(!obtenido) if(getGlobals()<0) return error("Error en get_value: Error en obtencion de var de entorno");
-    if(!conectado) if(connect_to(fdConexion)<0) return error("Error en get_value: Error en conexión");
+    if(!conectado) if(connect_to(&fdConexion)<0) return error("Error en get_value: Error en conexión");
 
     // preparación de petición
     struct Peticion pet;
-    char buff[MAX_LENG];
+    bzero(&pet, sizeof(struct Peticion));
+    char buff[MAX_LENG]={0};
     pet.cod_op=2;
     strcpy(pet.key, key);
     
@@ -135,13 +142,13 @@ int get_value(char *key, char *value1, int *N_value2, float *V_value2, struct Pa
     if(sock_send(fdConexion, buff, MAX_LENG)<0) return error("Error en get_value: Error al enviar");
     
     // recibir la respuesta
-    char buffRec[MAX_LENG];
+    char buffRec[MAX_LENG]={0};
     if(sock_receive(fdConexion, buffRec, MAX_LENG)<0) return error("Error en get_value: Error al recibir");
     struct Respuesta res;
     if(string_to_res(buffRec, &res)<0) return error("Error en get_value: Error al convertir respuesta a objeto");
 
     // preparar argumentos de vuelta
-    if(strcpy(value1, res.value1)<0)return error("Error en get_value: Error al copiar el value1 desde la respuesta");
+    if(strcpy(value1, res.value1)==NULL)return error("Error en get_value: Error al copiar el value1 desde la respuesta");
     *N_value2=res.N_value2;
     for(int i=0; i<*N_value2; ++i) V_value2[i] = res.V_value2[i];
     value3->x=res.value3.x;
@@ -156,12 +163,17 @@ int get_value(char *key, char *value1, int *N_value2, float *V_value2, struct Pa
 int modify_value(char *key, char *value1, int N_value2, float *V_value2, struct Paquete value3){
     // Funcion del proxy para llamar a modify_value
     // preparación previa
+    if(N_value2<1||N_value2>32)return -1; // BUG DE OVERFLOW SI NO CONTROLAMOS
+
     if(!obtenido) if(getGlobals()<0) return error("Error en modify_value: Error en obtencion de var de entorno");
-    if(!conectado) if(connect_to(fdConexion)<0) return error("Error en modify_value: Error en conexión");
+    if(!conectado) if(connect_to(&fdConexion)<0) return error("Error en modify_value: Error en conexión");
 
     // preparación de petición
     struct Peticion pet;
-    char buff[MAX_LENG];
+    bzero(&pet, sizeof(struct Peticion));
+    if(N_value2<1||N_value2>32)return -1; // BUG DE OVERFLOW SI NO CONTROLAMOS
+
+    char buff[MAX_LENG]={0};
     pet.cod_op=3;
     strcpy(pet.key, key);
     strcpy(pet.value1, value1);
@@ -176,7 +188,7 @@ int modify_value(char *key, char *value1, int N_value2, float *V_value2, struct 
     if(sock_send(fdConexion, buff, MAX_LENG)<0) return error("Error en modify_value: Error al enviar");
     
     // recibir la respuesta
-    char buffRec[MAX_LENG];
+    char buffRec[MAX_LENG]={0};
     if(sock_receive(fdConexion, buffRec, MAX_LENG)<0) return error("Error en modify_value: Error al recibir");
     struct Respuesta res;
     if(string_to_res(buffRec, &res)<0) return error("Error en modify_value: Error al convertir respuesta a objeto");
@@ -188,12 +200,15 @@ int modify_value(char *key, char *value1, int N_value2, float *V_value2, struct 
 int delete_key(char *key){
     // Funcion del proxy para llamar a delete_key
     // preparación previa
+
     if(!obtenido) if(getGlobals()<0) return error("Error en delete_key: Error en obtencion de var de entorno");
-    if(!conectado) if(connect_to(fdConexion)<0) return error("Error en delete_key: Error en conexión");
+    if(!conectado) if(connect_to(&fdConexion)<0) return error("Error en delete_key: Error en conexión");
 
     // preparación de petición
     struct Peticion pet;
-    char buff[MAX_LENG];
+    bzero(&pet, sizeof(struct Peticion));
+
+    char buff[MAX_LENG]={0};
     pet.cod_op=4;
     strcpy(pet.key, key);
     
@@ -202,7 +217,7 @@ int delete_key(char *key){
     if(sock_send(fdConexion, buff, MAX_LENG)<0) return error("Error en delete_key: Error al enviar");
     
     // recibir la respuesta
-    char buffRec[MAX_LENG];
+    char buffRec[MAX_LENG]={0};
     if(sock_receive(fdConexion, buffRec, MAX_LENG)<0) return error("Error en delete_key: Error al recibir");
     struct Respuesta res;
     if(string_to_res(buffRec, &res)<0) return error("Error en delete_key: Error al convertir respuesta a objeto");
@@ -215,11 +230,13 @@ int exist(char *key){
     // Funcion del proxy para llamar a exists
     // preparación previa
     if(!obtenido) if(getGlobals()<0) return error("Error en exists: Error en obtencion de var de entorno");
-    if(!conectado) if(connect_to(fdConexion)<0) return error("Error en exists: Error en conexión");
+    if(!conectado) if(connect_to(&fdConexion)<0) return error("Error en exists: Error en conexión");
 
     // preparación de petición
     struct Peticion pet;
-    char buff[MAX_LENG];
+    bzero(&pet, sizeof(struct Peticion));
+    
+    char buff[MAX_LENG]={0};
     pet.cod_op=5;
     strcpy(pet.key, key);
     
@@ -228,12 +245,14 @@ int exist(char *key){
     if(sock_send(fdConexion, buff, MAX_LENG)<0) return error("Error en exists: Error al enviar");
     
     // recibir la respuesta
-    char buffRec[MAX_LENG];
+    char buffRec[MAX_LENG]={0};
     if(sock_receive(fdConexion, buffRec, MAX_LENG)<0) return error("Error en exists: Error al recibir");
     struct Respuesta res;
+    bzero(&res, sizeof(struct Respuesta));
+
     if(string_to_res(buffRec, &res)<0) return error("Error en exists: Error al convertir respuesta a objeto");
 
-    int result = res.cod_err==0? 0 : -1;
+    int result = res.cod_err;
     return (result);
 
 }

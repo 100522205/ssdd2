@@ -13,10 +13,90 @@
 #include <netdb.h>
 #include "claves.h"
 #include "sock.h"
+#include <pthread.h>
 
 int error(char * message){
     printf("\n Error en el código del servidor: %s\n", message);
     return -1;
+}
+
+struct argumento{
+    int fd;
+};
+
+void * worker(void * argum){
+    /*Funcion del thread trabajador*/
+    // detatch para tener muchos
+
+    // obtener los argumentos y evitar condicion de carrera
+    int fd=*((int*)argum);
+
+    pthread_detach(pthread_self());
+
+    char buff[MAX_LENG]={0};
+
+    struct Peticion pet;
+    struct Respuesta res;
+
+    while(sock_receive(fd, buff, MAX_LENG)>0){
+
+        // obtener de string
+        bzero(&pet, sizeof(struct Peticion));
+        if(string_to_pet(buff, &pet)<0) {
+            printf("Error en la creación de Struct Peticion");
+            if(close(fd)<0){
+                printf("Error cerrando fd de conexión");
+                break;}
+            break;}
+
+        // operar
+        int err = 0;
+
+        bzero(&res, sizeof(struct Respuesta));
+
+        switch(pet.cod_op){
+        case 0:
+            err=destroy();
+            break;
+        case 1:
+            err = set_value(pet.key, pet.value1, pet.N_value2, pet.V_value2, pet.value3);
+            break;
+        
+        case 2:
+            err = get_value(pet.key, res.value1, &res.N_value2, res.V_value2, &res.value3);
+            break;
+        case 3:
+            err = modify_value(pet.key, pet.value1, pet.N_value2, pet.V_value2, pet.value3);
+            break;
+        case 4:
+            err = delete_key(pet.key);
+            break;
+        case 5:
+            err = exist(pet.key);
+            break;
+        }
+        res.cod_err=err;
+
+        // ahora, enviar
+        bzero(buff, MAX_LENG);
+        if(res_to_string(&res, buff)<0){
+            printf("Error en creación de string de respuesta");
+            if(close(fd)<0){
+                printf("Error cerrando fd de conexión");
+                break;}       
+            break;}
+        if(sock_send(fd, buff, MAX_LENG)<0) {
+            printf("Error en envío de string de respuesta");
+            if(close(fd)<0){
+                printf("Error cerrando fd de conexión");
+                break;}
+            break;}
+        }
+
+    if(close(fd)<0){
+        printf("Error cerrando fd de conexión");
+        }
+    pthread_exit(NULL);
 }
 
 int main(int argc, char **argv){
@@ -53,95 +133,17 @@ int main(int argc, char **argv){
         socklen_t s = sizeof(socketRemote);
         // accept es bloqueante, se espera en la sig linea hasta que llegue request
 
-        int fd_client = accept(server_fd,(struct sockaddr_in *)&socketRemote, &s);
+        int fd_client = accept(server_fd,(struct sockaddr *)&socketRemote, &s);
         if(fd_client<0) {
             printf("Error en accept");
             continue;}
-        // Ahora queda recibir, operar y enviar
-        char buff[MAX_LENG];
-        sock_receive(fd_client, buff, MAX_LENG);
-
-        // obtener de string
-        struct Peticion * pet = (struct Peticion *)malloc(sizeof(struct Peticion));
-        bzero(pet, sizeof(struct Peticion));
-        if(string_to_pet(buff, pet)<0) {
-            printf("Error en la creación de Struct Peticion");
-            free(pet);
-            if(close(fd_client)<0){
-                printf("Error cerrando fd de conexión");
-                continue;}
-            continue;}
-
-        // operar
-        int err = 0;
-        struct Respuesta * res  = (struct Respuesta *)malloc(sizeof(struct Respuesta));
-        if(res == NULL) {
-            printf("Error en la creación de Struct Respuesta");
-            free(pet);
-            free(res);
-            if(close(fd_client)<0){
-                printf("Error cerrando fd de conexión");
-                continue;}
-            continue;}
-
-        bzero(res, sizeof(struct Respuesta));
-
-        switch(pet->cod_op){
-        case 0:
-            err=destroy();
-            break;
-        case 1:
-            err = set_value(pet->key, pet->value1, pet->N_value2, pet->V_value2, pet->value3);
-            break;
+        // Ahora queda recibir, operar y enviar: se encarga el thread dado el fd
+        int *fd_client_ptr=malloc(sizeof(int));
+        *fd_client_ptr=fd_client;
+        pthread_t id;
+        pthread_create(&id, NULL, (void *)worker, fd_client_ptr);
+        // evitar condicion de carrera por el arg
         
-        case 2:
-            err = get_value(pet->key, res->value1, &res->N_value2, res->V_value2, &res->value3);
-            break;
-        case 3:
-            err = modify_value(pet->key, pet->value1, pet->N_value2, pet->V_value2, pet->value3);
-            break;
-        case 4:
-            err = delete_key(pet->key);
-            break;
-        case 5:
-            err = exist(pet->key);
-            break;
-        }
-        res->cod_err=err;
-
-        // ahora, enviar
-
-        if(res_to_string(res, buff)<0){
-            printf("Error en creación de string de respuesta");
-            free(pet);
-            free(res);
-            if(close(fd_client)<0){
-                printf("Error cerrando fd de conexión");
-                continue;}       
-            continue;}
-        if(sock_send(fd_client, buff, MAX_LENG)<0) {
-            printf("Error en envío de string de respuesta");
-            free(pet);
-            free(res);
-            if(close(fd_client)<0){
-                printf("Error cerrando fd de conexión");
-                continue;}
-            continue;}
-
-        if(close(fd_client)<0){
-            printf("Error cerrando fd de conexión");
-            free(pet);
-            free(res);
-            continue;}
-        
-        free(pet);
-        free(res);
     }
     return -1;
  }
-
-
-
-
-
-

@@ -3,7 +3,7 @@ CC      = gcc
 CFLAGS  = -Wall -Wextra -g -fPIC -pthread
 # LDFLAGS: -L. busca librerías en la carpeta actual. -lrt es para colas de mensajes POSIX.
 LDFLAGS = -L. -Wl,-rpath,.
-LDLIBS  = -lrt
+LDLIBS  = -lrt -lpthread
 
 #  Nombres de archivos 
 OBJ_DIR = .o
