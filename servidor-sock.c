@@ -1,5 +1,5 @@
 // $>export IP_TUPLAS=localhost
-// $>export PORT_TUPLAS=0777
+// $>export PORT_TUPLAS=8080 <- cambio de puerto a uno no restringido por SO
 
 // ----------- COMPROBAR IP/PUERTO EXISTEN ----------- //
 
@@ -15,13 +15,15 @@
 #include "sock.h"
 #include <pthread.h>
 
+pthread_mutex_t mutex_db = PTHREAD_MUTEX_INITIALIZER;
+
 int error(char * message){
     printf("\n Error en el código del servidor: %s\n", message);
     return -1;
 }
 
 struct argumento{
-    int fd;
+    int sd;
 };
 
 void * worker(void * argum){
@@ -29,7 +31,7 @@ void * worker(void * argum){
     // detatch para tener muchos
 
     // obtener los argumentos y evitar condicion de carrera
-    int fd=*((int*)argum);
+    int sd=*((int*)argum);
 
     pthread_detach(pthread_self());
 
@@ -38,14 +40,14 @@ void * worker(void * argum){
     struct Peticion pet;
     struct Respuesta res;
 
-    while(sock_receive(fd, buff, MAX_LENG)>0){
+    while(sock_receive(sd, buff, MAX_LENG)>0){
 
         // obtener de string
         bzero(&pet, sizeof(struct Peticion));
         if(string_to_pet(buff, &pet)<0) {
             printf("Error en la creación de Struct Peticion");
-            if(close(fd)<0){
-                printf("Error cerrando fd de conexión");
+            if(close(sd)<0){
+                printf("Error cerrando sd de conexión");
                 break;}
             break;}
 
@@ -53,6 +55,8 @@ void * worker(void * argum){
         int err = 0;
 
         bzero(&res, sizeof(struct Respuesta));
+
+        pthread_mutex_lock(&mutex_db);
 
         switch(pet.cod_op){
         case 0:
@@ -77,24 +81,26 @@ void * worker(void * argum){
         }
         res.cod_err=err;
 
+        pthread_mutex_unlock(&mutex_db);
+
         // ahora, enviar
         bzero(buff, MAX_LENG);
         if(res_to_string(&res, buff)<0){
             printf("Error en creación de string de respuesta");
-            if(close(fd)<0){
-                printf("Error cerrando fd de conexión");
+            if(close(sd)<0){
+                printf("Error cerrando sd de conexión");
                 break;}       
             break;}
-        if(sock_send(fd, buff, MAX_LENG)<0) {
+        if(sock_send(sd, buff, MAX_LENG)<0) {
             printf("Error en envío de string de respuesta");
-            if(close(fd)<0){
-                printf("Error cerrando fd de conexión");
+            if(close(sd)<0){
+                printf("Error cerrando sd de conexión");
                 break;}
             break;}
         }
 
-    if(close(fd)<0){
-        printf("Error cerrando fd de conexión");
+    if(close(sd)<0){
+        printf("Error cerrando sd de conexión");
         }
     pthread_exit(NULL);
 }
@@ -105,7 +111,7 @@ int main(int argc, char **argv){
      * luego crea otro puerto para la comunicación con el cliente.
      * finalmente asigna la tarea a un thread, que se encarga de devolver el resultado*/
     // checkeamos el argumento 
-    if(argc!=2) return error("Introduzca como parámetro el puerto para recepción de requests");
+    if(argc!=2) return error("Uso: ./servidor <num_puerto>");
     
     // preparar la direccion propia y hacer bind
     struct sockaddr_in mySocket;
@@ -117,15 +123,15 @@ int main(int argc, char **argv){
     mySocket.sin_port = htons(myAddress);
 
     int o=1;
-    int server_fd=socket(AF_INET, SOCK_STREAM, 0);
-    if(setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &o, sizeof(o))<0) return error("En setsockopt");
+    int server_sd=socket(AF_INET, SOCK_STREAM, 0);
+    if(setsockopt(server_sd, SOL_SOCKET, SO_REUSEADDR, &o, sizeof(o))<0) return error("En setsockopt");
 
-    if(bind(server_fd, (struct sockaddr *)&mySocket, sizeof(mySocket))<0) return error("En bind");
+    if(bind(server_sd, (struct sockaddr *)&mySocket, sizeof(mySocket))<0) return error("En bind");
 
     // Conexión TCP
     // Escuchar y aceptar
 
-    if(listen(server_fd, SOMAXCONN)<0) return error("Error en listen");
+    if(listen(server_sd, SOMAXCONN)<0) return error("Error en listen");
 
     // loop principal
     while(1){
@@ -133,15 +139,15 @@ int main(int argc, char **argv){
         socklen_t s = sizeof(socketRemote);
         // accept es bloqueante, se espera en la sig linea hasta que llegue request
 
-        int fd_client = accept(server_fd,(struct sockaddr *)&socketRemote, &s);
-        if(fd_client<0) {
+        int sd_client = accept(server_sd,(struct sockaddr *)&socketRemote, &s);
+        if(sd_client<0) {
             printf("Error en accept");
             continue;}
-        // Ahora queda recibir, operar y enviar: se encarga el thread dado el fd
-        int *fd_client_ptr=malloc(sizeof(int));
-        *fd_client_ptr=fd_client;
+        // Ahora queda recibir, operar y enviar: se encarga el thread dado el sd
+        int *sd_client_ptr=malloc(sizeof(int));
+        *sd_client_ptr=sd_client;
         pthread_t id;
-        pthread_create(&id, NULL, (void *)worker, fd_client_ptr);
+        pthread_create(&id, NULL, (void *)worker, sd_client_ptr);
         // evitar condicion de carrera por el arg
         
     }
