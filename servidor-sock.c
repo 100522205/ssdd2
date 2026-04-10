@@ -46,64 +46,63 @@ void * worker(void * argum){
     struct Peticion pet;
     struct Respuesta res;
 
-    while(sock_receive(sd, buff, MAX_LENG)>0){
+    sock_receive(sd, buff, MAX_LENG);
 
-        // obtener de string
-        bzero(&pet, sizeof(struct Peticion));
-        if(string_to_pet(buff, &pet)<0) {
-            error_th("Error en la creación de Struct Peticion");
-            if(close(sd)<0){
-                error_th("Error cerrando sd de conexión");
-                break;}
-            break;}
-
-        // operar
-        int err = 0;
-
-        bzero(&res, sizeof(struct Respuesta));
-
-        pthread_mutex_lock(&mutex_db);
-
-        switch(pet.cod_op){
-        case 0:
-            err=destroy();
-            break;
-        case 1:
-            err = set_value(pet.key, pet.value1, pet.N_value2, pet.V_value2, pet.value3);
-            break;
-        
-        case 2:
-            err = get_value(pet.key, res.value1, &res.N_value2, res.V_value2, &res.value3);
-            break;
-        case 3:
-            err = modify_value(pet.key, pet.value1, pet.N_value2, pet.V_value2, pet.value3);
-            break;
-        case 4:
-            err = delete_key(pet.key);
-            break;
-        case 5:
-            err = exist(pet.key);
-            break;
+    // obtener de string
+    bzero(&pet, sizeof(struct Peticion));
+    if(string_to_pet(buff, &pet)<0) {
+        error_th("Error en la creación de Struct Peticion");
+        if(close(sd)<0){
+            error_th("Error cerrando sd de conexión");
         }
-        res.cod_err=err;
+    }
 
-        pthread_mutex_unlock(&mutex_db);
+    // operar
+    int err = 0;
 
-        // ahora, enviar
-        bzero(buff, MAX_LENG);
-        if(res_to_string(&res, buff)<0){
-            error_th("Error en creación de string de respuesta");
-            if(close(sd)<0){
-                error_th("Error cerrando sd de conexión");
-                break;}       
-            break;}
-        if(sock_send(sd, buff, MAX_LENG)<0) {
-            error_th("Error en envío de string de respuesta");
-            if(close(sd)<0){
-                error_th("Error cerrando sd de conexión");
-                break;}
-            break;}
+    bzero(&res, sizeof(struct Respuesta));
+
+    pthread_mutex_lock(&mutex_db);
+
+    switch(pet.cod_op){
+    case 0:
+        err=destroy();
+        break;
+    case 1:
+        err = set_value(pet.key, pet.value1, pet.N_value2, pet.V_value2, pet.value3);
+        break;
+    
+    case 2:
+        err = get_value(pet.key, res.value1, &res.N_value2, res.V_value2, &res.value3);
+        break;
+    case 3:
+        err = modify_value(pet.key, pet.value1, pet.N_value2, pet.V_value2, pet.value3);
+        break;
+    case 4:
+        err = delete_key(pet.key);
+        break;
+    case 5:
+        err = exist(pet.key);
+        break;
+    }
+    res.cod_err=err;
+
+    pthread_mutex_unlock(&mutex_db);
+
+    // ahora, enviar
+    bzero(buff, MAX_LENG);
+    if(res_to_string(&res, buff)<0){
+        error_th("Error en creación de string de respuesta");
+        if(close(sd)<0){
+            error_th("Error cerrando sd de conexión");
+        }       
+    }
+    if(sock_send(sd, buff, MAX_LENG)<0) {
+        error_th("Error en envío de string de respuesta");
+        if(close(sd)<0){
+            error_th("Error cerrando sd de conexión");
         }
+    }
 
     if(close(sd)<0){
         error_th("Error cerrando sd de conexión");
