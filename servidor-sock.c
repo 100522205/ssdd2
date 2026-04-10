@@ -17,10 +17,16 @@
 
 pthread_mutex_t mutex_db = PTHREAD_MUTEX_INITIALIZER;
 
-int error(char * message){
+int error(char * message, int cod){
     printf("\n Error en el código del servidor: %s\n", message);
-    return -1;
+    return cod;
 }
+
+
+void error_th(char * message){
+    printf("\n Error en el código del servidor: %s\n", message);
+}
+
 
 struct argumento{
     int sd;
@@ -45,9 +51,9 @@ void * worker(void * argum){
         // obtener de string
         bzero(&pet, sizeof(struct Peticion));
         if(string_to_pet(buff, &pet)<0) {
-            printf("Error en la creación de Struct Peticion");
+            error_th("Error en la creación de Struct Peticion");
             if(close(sd)<0){
-                printf("Error cerrando sd de conexión");
+                error_th("Error cerrando sd de conexión");
                 break;}
             break;}
 
@@ -86,21 +92,21 @@ void * worker(void * argum){
         // ahora, enviar
         bzero(buff, MAX_LENG);
         if(res_to_string(&res, buff)<0){
-            printf("Error en creación de string de respuesta");
+            error_th("Error en creación de string de respuesta");
             if(close(sd)<0){
-                printf("Error cerrando sd de conexión");
+                error_th("Error cerrando sd de conexión");
                 break;}       
             break;}
         if(sock_send(sd, buff, MAX_LENG)<0) {
-            printf("Error en envío de string de respuesta");
+            error_th("Error en envío de string de respuesta");
             if(close(sd)<0){
-                printf("Error cerrando sd de conexión");
+                error_th("Error cerrando sd de conexión");
                 break;}
             break;}
         }
 
     if(close(sd)<0){
-        printf("Error cerrando sd de conexión");
+        error_th("Error cerrando sd de conexión");
         }
     pthread_exit(NULL);
 }
@@ -111,7 +117,7 @@ int main(int argc, char **argv){
      * luego crea otro puerto para la comunicación con el cliente.
      * finalmente asigna la tarea a un thread, que se encarga de devolver el resultado*/
     // checkeamos el argumento 
-    if(argc!=2) return error("Uso: ./servidor <num_puerto>");
+    if(argc!=2) return error("Uso: ./servidor <num_puerto>", -2);
     
     // preparar la direccion propia y hacer bind
     struct sockaddr_in mySocket;
@@ -124,14 +130,14 @@ int main(int argc, char **argv){
 
     int o=1;
     int server_sd=socket(AF_INET, SOCK_STREAM, 0);
-    if(setsockopt(server_sd, SOL_SOCKET, SO_REUSEADDR, &o, sizeof(o))<0) return error("En setsockopt");
+    if(setsockopt(server_sd, SOL_SOCKET, SO_REUSEADDR, &o, sizeof(o))<0) return error("En setsockopt", -2);
 
-    if(bind(server_sd, (struct sockaddr *)&mySocket, sizeof(mySocket))<0) return error("En bind");
+    if(bind(server_sd, (struct sockaddr *)&mySocket, sizeof(mySocket))<0) return error("En bind", -2);
 
     // Conexión TCP
     // Escuchar y aceptar
 
-    if(listen(server_sd, SOMAXCONN)<0) return error("Error en listen");
+    if(listen(server_sd, SOMAXCONN)<0) return error("Error en listen", -2);
 
     // loop principal
     while(1){
